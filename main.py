@@ -88,6 +88,10 @@ class SteeringGame:
         self.current_behavior = behavior
         # Reset agent velocity when changing behaviors
         self.agent_vel = Vector2D(0, 0)
+        # Reset the behavior instance if it exists
+        if behavior in self.behavior_instances:
+            if hasattr(self.behavior_instances[behavior], 'reset'):
+                self.behavior_instances[behavior].reset()
         # Update title
         self.root.title(f"Steering Behaviors - Current Mode: {behavior}")
     
