@@ -34,14 +34,14 @@ class SteeringGame:
         
         # Speed slider
         ttk.Label(self.sliders_frame, text="Speed").pack(side=tk.TOP, anchor=tk.W)
-        self.speed_slider = ttk.Scale(self.sliders_frame, from_=0, to=100, orient=tk.HORIZONTAL)
-        self.speed_slider.set(50)
+        self.speed_slider = ttk.Scale(self.sliders_frame, from_=20, to=60, orient=tk.HORIZONTAL)
+        self.speed_slider.set(40)
         self.speed_slider.pack(fill=tk.X)
         
         # Force slider
         ttk.Label(self.sliders_frame, text="Force").pack(side=tk.TOP, anchor=tk.W)
-        self.force_slider = ttk.Scale(self.sliders_frame, from_=0, to=100, orient=tk.HORIZONTAL)
-        self.force_slider.set(50)
+        self.force_slider = ttk.Scale(self.sliders_frame, from_=10, to=50, orient=tk.HORIZONTAL)
+        self.force_slider.set(30)
         self.force_slider.pack(fill=tk.X)
         
         # Create behavior buttons
@@ -60,6 +60,7 @@ class SteeringGame:
         
         # Draw initial state
         self.draw_agent()
+        self.draw_waypoints()
         self.draw_target()
         
         # Bind mouse events
@@ -94,6 +95,8 @@ class SteeringGame:
                 self.behavior_instances[behavior].reset()
         # Update title
         self.root.title(f"Steering Behaviors - Current Mode: {behavior}")
+        self.draw_waypoints()
+
     
     def draw_agent(self):
         self.canvas.delete("agent")
@@ -150,8 +153,8 @@ class SteeringGame:
             behavior = self.get_behavior_instance(self.current_behavior)
             
             # Get max speed and force from sliders
-            max_speed = self.speed_slider.get() * 0.5  # Reduced multiplier
-            max_force = self.force_slider.get() * 0.2  # Reduced multiplier
+            max_speed = self.speed_slider.get() * 0.2  # Reduced multiplier
+            max_force = self.force_slider.get() * 0.1  # Reduced multiplier
             
             # Calculate steering force
             steering = behavior.calculate(
@@ -189,13 +192,31 @@ class SteeringGame:
             
             # Redraw agent
             self.draw_agent()
+            self.draw_waypoints()  # Make sure waypoints are drawn every frame
+            self.draw_target()
         
         # Schedule next update
         if self.is_running:
             self.root.after(16, self.update)
-    
+    def draw_waypoints(self):
+        self.canvas.delete("waypoints")
+        if self.current_behavior in ["Circuit", "One Way", "Two Ways"]:
+            behavior = self.get_behavior_instance(self.current_behavior)
+            # Draw lines connecting waypoints
+            for i in range(len(behavior.waypoints) - 1):
+                x1, y1 = behavior.waypoints[i].x, behavior.waypoints[i].y
+                x2, y2 = behavior.waypoints[i + 1].x, behavior.waypoints[i + 1].y
+                self.canvas.create_line(x1, y1, x2, y2, dash=(4, 4), fill='gray50', tags="waypoints")
+            
+            # Draw waypoint markers
+            for point in behavior.waypoints:
+                x, y = point.x, point.y
+                size = 5
+                self.canvas.create_oval(x-size, y-size, x+size, y+size, 
+                                    fill='blue', tags="waypoints")
     def run(self):
         self.root.mainloop()
+
 
 if __name__ == "__main__":
     game = SteeringGame()

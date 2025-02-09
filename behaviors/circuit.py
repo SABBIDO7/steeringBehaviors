@@ -14,7 +14,7 @@ class Circuit:
     
     def calculate(self, agent_pos, agent_vel, target_pos, target_vel, max_speed, max_force):
         target = self.waypoints[self.current_waypoint]
-        if agent_pos.distance_to(target) < 20:
+        if agent_pos.distance_to(target) < 5:
             self.current_waypoint = (self.current_waypoint + 1) % len(self.waypoints)
             target = self.waypoints[self.current_waypoint]
         
