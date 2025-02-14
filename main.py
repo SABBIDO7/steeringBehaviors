@@ -40,8 +40,8 @@ class SteeringGame:
         
         # Force slider
         ttk.Label(self.sliders_frame, text="Force").pack(side=tk.TOP, anchor=tk.W)
-        self.force_slider = ttk.Scale(self.sliders_frame, from_=10, to=50, orient=tk.HORIZONTAL)
-        self.force_slider.set(30)
+        self.force_slider = ttk.Scale(self.sliders_frame, from_=1, to=3, orient=tk.HORIZONTAL)
+        self.force_slider.set(2)
         self.force_slider.pack(fill=tk.X)
         
         # Create behavior buttons
