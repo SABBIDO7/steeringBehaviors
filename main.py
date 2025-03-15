@@ -120,10 +120,29 @@ class RescueSimulation:
         self.setup_game()
         
         # Bind mouse click for player movement
-        self.canvas.bind("<Button-1>", self.on_mouse_click)
+        self.canvas.unbind("<Button-1>")  # Remove existing mouse binding
+        self.root.bind("<KeyRelease>", self.key_released)
+
+        # Add key bindings for WASD movement
+        self.root.bind("<w>", self.move_up)
+        self.root.bind("<a>", self.move_left)
+        self.root.bind("<s>", self.move_down)
+        self.root.bind("<d>", self.move_right)
+        self.root.bind("<W>", self.move_up)      # Support uppercase too
+        self.root.bind("<A>", self.move_left)
+        self.root.bind("<S>", self.move_down)
+        self.root.bind("<D>", self.move_right)
+        
+        # Player movement speed
+        self.player_speed = 5
+        
+        # Add a variable to store key states
+        self.keys_pressed = set()
         
         # Start game loop
         self.update()
+            
+        
 
     def setup_game(self):
         """Initialize the game world with all elements"""
@@ -225,7 +244,9 @@ class RescueSimulation:
             self.waypoints[13]: [self.waypoints[11], self.waypoints[19], self.waypoints[2]],
             self.waypoints[2]: [self.waypoints[1], self.waypoints[7], self.waypoints[13]]
         }
-
+    def key_released(self, event):
+    # Stop movement when key is released
+        self.player_vel = Vector2D(0, 0)
     def spawn_victims(self, count):
         """Place victims on the map avoiding obstacles."""
         self.victims = []
@@ -275,12 +296,55 @@ class RescueSimulation:
             return None
         return min(entities, key=lambda e: position.distance_to(e))
 
-    def is_valid_position(self, x, y, radius=15):
-        """Check if position collides with a city block."""
+     # Add these new methods for WASD movement
+    def move_up(self, event):
+        self.player_vel = Vector2D(0, -self.player_speed)
+    
+    def move_left(self, event):
+        self.player_vel = Vector2D(-self.player_speed, 0)
+    
+    def move_down(self, event):
+        self.player_vel = Vector2D(0, self.player_speed)
+    
+    def move_right(self, event):
+        self.player_vel = Vector2D(self.player_speed, 0)
+    
+    # Replace the on_mouse_click method with this interaction method
+    def check_player_interactions(self):
+        """Check for player interactions with victims and hospitals"""
+        # Check for victim pickup
+        if not self.player_carrying_victim:
+            for victim in self.victims:
+                if self.player_pos.distance_to(victim) < 15:
+                    self.player_carrying_victim = victim
+                    self.victims.remove(victim)
+                    self.status_label.config(text=f"Player picked up victim. Remaining: {len(self.victims)}")
+                    break
+        
+        # Check for hospital dropoff
+        elif self.player_carrying_victim:
+            for hospital in self.hospitals:
+                if self.player_pos.distance_to(hospital) < 20:
+                    self.player_carrying_victim = None
+                    self.rescued_count += 1
+                    self.status_label.config(text=f"Victims rescued: {self.rescued_count} | Remaining: {len(self.victims)}")
+                    break
+    
+    # Replace the is_valid_position method to account for NPC collision
+    def is_valid_position(self, x, y, radius=15, check_npc=True):
+        """Check if position collides with a city block or NPC."""
+        # Check collision with city blocks
         for block in self.city_blocks:
             if (x > block['x'] - radius and x < block['x'] + block['width'] + radius and
                 y > block['y'] - radius and y < block['y'] + block['height'] + radius):
                 return False
+        
+        # Check collision with NPC if requested
+        if check_npc:
+            npc_collision_distance = 30  # Combined radius of player and NPC
+            if Vector2D(x, y).distance_to(self.npc_pos) < npc_collision_distance:
+                return False
+        
         return True
 
     def get_closest_waypoint(self, position):
@@ -386,6 +450,22 @@ class RescueSimulation:
     
     def move_along_path(self):
         """Move NPC along the calculated path."""
+        player_distance = self.npc_pos.distance_to(self.player_pos)
+        if player_distance < 60:
+            # Try to avoid player
+            if self.avoid_obstacle():
+                # Successfully avoided player, may need to recalculate path
+                if self.npc_target:
+                    # Only recalculate if we've moved significantly off path
+                    if self.current_waypoint_index < len(self.npc_path):
+                        current_target = self.npc_path[self.current_waypoint_index]
+                        if self.npc_pos.distance_to(current_target) > 40:
+                            # Recalculate path from current position
+                            self.npc_path = self.bfs_find_path(self.npc_pos, self.npc_target)
+                            self.current_waypoint_index = 0
+                return
+        
+        # Continue with regular path following if no player avoidance needed
         if not self.npc_path or self.current_waypoint_index >= len(self.npc_path):
             return
             
@@ -418,7 +498,7 @@ class RescueSimulation:
         new_pos = self.npc_pos + self.npc_vel
         
         # Check if new position is valid (not inside obstacle)
-        if self.is_valid_position(new_pos.x, new_pos.y):
+        if self.is_valid_position(new_pos.x, new_pos.y, check_npc=False):
             self.npc_pos = new_pos
         else:
             # If invalid, try to steer around obstacle
@@ -426,6 +506,31 @@ class RescueSimulation:
             
     def avoid_obstacle(self):
         """Simple obstacle avoidance behavior."""
+        player_distance = self.npc_pos.distance_to(self.player_pos)
+        if player_distance < 60:  # Detect player from further away
+            # Calculate vector away from player
+            away_vector = self.npc_pos - self.player_pos
+            if away_vector.length() > 0:
+                away_vector = away_vector.normalized() * self.max_speed
+                
+                # Stronger avoidance force when closer to player
+                avoidance_force = self.max_force * (1 + (60 - player_distance) / 30)
+                
+                # Apply steering away from player
+                self.npc_vel = self.npc_vel + (away_vector * avoidance_force)
+                
+                # Limit speed
+                if self.npc_vel.length() > self.max_speed:
+                    self.npc_vel = self.npc_vel.normalized() * self.max_speed
+                
+                # Try moving with new velocity
+                new_pos = self.npc_pos + self.npc_vel
+                
+                # Check if new position is valid (ignoring NPC-player collision check to avoid recursion)
+                if self.is_valid_position(new_pos.x, new_pos.y, check_npc=False):
+                    self.npc_pos = new_pos
+                    return True
+        # If player avoidance didn't succeed or wasn't needed, use original method
         # Get the closest waypoint
         closest_waypoint = self.get_closest_waypoint(self.npc_pos)
         
@@ -448,11 +553,14 @@ class RescueSimulation:
             new_pos = self.npc_pos + self.npc_vel
             
             # Check if new position is valid
-            if self.is_valid_position(new_pos.x, new_pos.y):
+            if self.is_valid_position(new_pos.x, new_pos.y, check_npc=False):
                 self.npc_pos = new_pos
+                return True
             else:
                 # If still invalid, try random direction
                 self.npc_vel = Vector2D(random.uniform(-1, 1), random.uniform(-1, 1)).normalized() * self.max_speed
+                return False
+        return False
                 
     def on_mouse_click(self, event):
         """Handle mouse click for player movement."""
@@ -501,7 +609,6 @@ class RescueSimulation:
             # Check if new position is valid
             if self.is_valid_position(new_pos.x, new_pos.y):
                 self.player_pos = new_pos
-            
             # Check if reached target
             if self.player_pos.distance_to(self.player_target) < 10:
                 # Check if target is a victim (for pickup)
@@ -522,7 +629,16 @@ class RescueSimulation:
                 # Reset target
                 self.player_target = None
                 self.player_vel = Vector2D(0, 0)
-    
+        elif self.player_vel.length() > 0:
+            # Move player directly with current velocity
+            new_pos = self.player_pos + self.player_vel
+            
+            # Check if new position is valid
+            if self.is_valid_position(new_pos.x, new_pos.y):
+                self.player_pos = new_pos
+                
+            # Check for interactions
+            self.check_player_interactions()
     def draw(self):
         """Draw all game elements to the canvas."""
         self.canvas.delete("all")
